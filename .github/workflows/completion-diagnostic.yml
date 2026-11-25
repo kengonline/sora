@@ -1,0 +1,48 @@
+name: Completion diagnostic
+on:
+  push:
+    branches: [codex/diagnose-autocomplete-backspace]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-input:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Install Zig
+        run: brew install zig
+      - uses: actions/cache@v4
+        with:
+          path: Vendor/ghostty
+          key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-${{ hashFiles('Scripts/build-ghosttykit.sh', 'patches/ghostty-semantic-prompt-boundaries.patch') }}
+      - name: Instrument native input
+        run: python3 Scripts/probe-completion.py
+      - name: Build GhosttyKit
+        run: bash Scripts/build-ghosttykit.sh
+      - name: Build and test Sora
+        run: |
+          set -o pipefail
+          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > build.log 2>&1 || { tail -100 build.log; exit 1; }
+          tail -25 build.log
+      - name: Exercise native input
+        run: |
+          SORA_COMPLETION_PROBE=1 .derivedData/Build/Products/Debug/Sora.app/Contents/MacOS/Sora > probe.log 2>&1 &
+          APP_PID=$!
+          for i in {1..90}; do
+            if ! kill -0 "$APP_PID" 2>/dev/null; then wait "$APP_PID"; cat probe.log; exit 0; fi
+            sleep 1
+          done
+          cat probe.log
+          kill "$APP_PID"
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: completion-diagnostic
+          path: |
+            build.log
+            probe.log
