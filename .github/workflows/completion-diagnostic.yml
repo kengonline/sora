@@ -52,7 +52,7 @@ jobs:
       - name: Build and test fixed Sora
         run: |
           set -o pipefail
-          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Release -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > fixed-build.log 2>&1 || { tail -100 fixed-build.log; exit 1; }
+          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Release -destination 'platform=macOS,arch=x86_64' -derivedDataPath .derivedData -parallel-testing-enabled NO ARCHS=x86_64 ONLY_ACTIVE_ARCH=YES test > fixed-build.log 2>&1 || { tail -100 fixed-build.log; exit 1; }
           tail -25 fixed-build.log
       - name: Exercise fixed native input
         run: bash Scripts/run-completion-probe.sh fixed Release
