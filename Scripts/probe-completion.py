@@ -16,7 +16,7 @@ text += r'''
 extension GhosttySurfaceView {
     private func probeCompletion() async {
         func log(_ label: String) {
-            print("PROBE \(label): line=\(String(reflecting: shellEditLine)) cursor=\(shellCursorOffset) tracked=\(completion.buffer.isTracking) buffer=\(String(reflecting: completion.buffer.text)) suggestion=\(String(reflecting: completion.suggestion))")
+            print("PROBE \(label): line=\(String(reflecting: shellEditLine)) cursor=\(shellCursorOffset) tracked=\(completion.buffer.isTracking) buffer=\(String(reflecting: completion.buffer.text)) history=\(commandHistory.isPresented) selected=\(String(reflecting: commandHistory.selected?.command))")
             fflush(stdout)
         }
         func key(_ code: UInt16, _ text: String) {
@@ -34,15 +34,22 @@ extension GhosttySurfaceView {
             window?.makeFirstResponder(self)
             let cwd = lastWorkingDirectory ?? initialWorkingDirectory ?? FileManager.default.homeDirectoryForCurrentUser
             let run = CommandRunFactory.make(command: "docker start postgres17.5", cwd: cwd, exitCode: 0, durationNanos: 1)!
-            try runtime.history.record(run)
+            try runtime.history.record(run, tabID: tabID)
             log("initial")
-            for character in "docker sta" { key(character == " " ? 49 : 0, String(character)) }
+            for character in "clear" { key(0, String(character)) }
+            key(PromptEvent.returnKey, "\r")
             try await Task.sleep(for: .seconds(2))
-            log("typed prefix")
-            key(PromptEvent.tab, "\t")
+            log("after clear")
+            key(PromptEvent.upArrow, "\u{f700}")
             try await Task.sleep(for: .seconds(1))
-            log("accepted Tab")
+            if commandHistory.selected?.command == "clear" {
+                key(PromptEvent.upArrow, "\u{f700}")
+            }
+            try await Task.sleep(for: .seconds(1))
+            log("recalled command")
             key(PromptEvent.delete, "\u{7f}")
+            try await Task.sleep(for: .seconds(1))
+            log("first Backspace")
             key(PromptEvent.delete, "\u{7f}")
             try await Task.sleep(for: .seconds(1))
             log("deleted .5")
