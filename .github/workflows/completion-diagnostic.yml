@@ -7,12 +7,12 @@ permissions:
   contents: read
 jobs:
   native-input:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - name: Install Zig
         run: |
           python3 - <<'PY'
@@ -37,26 +37,30 @@ jobs:
         run: python3 Scripts/probe-completion.py
       - name: Build GhosttyKit
         run: bash Scripts/build-ghosttykit.sh
-      - name: Build and test Sora
+      - name: Build original Sora
         run: |
           set -o pipefail
-          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > build.log 2>&1 || { tail -100 build.log; exit 1; }
-          tail -25 build.log
-      - name: Exercise native input
+          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData build > baseline-build.log 2>&1 || { tail -100 baseline-build.log; exit 1; }
+          tail -25 baseline-build.log
+      - name: Exercise original native input
+        continue-on-error: true
+        run: bash Scripts/run-completion-probe.sh baseline
+      - name: Apply PR fix and instrument it
         run: |
-          SORA_COMPLETION_PROBE=1 .derivedData/Build/Products/Debug/Sora.app/Contents/MacOS/Sora > probe.log 2>&1 &
-          APP_PID=$!
-          for i in {1..90}; do
-            if ! kill -0 "$APP_PID" 2>/dev/null; then wait "$APP_PID"; cat probe.log; exit 0; fi
-            sleep 1
-          done
-          cat probe.log
-          kill "$APP_PID"
-          exit 1
+          git fetch origin codex/fix-autocomplete-backspace
+          git checkout FETCH_HEAD -- Sora/Commands/CommandHistorySession.swift Sora/Terminal/GhosttySurfaceView.swift SoraTests/CommandHistorySessionTests.swift
+          python3 Scripts/probe-completion.py
+      - name: Build and test fixed Sora
+        run: |
+          set -o pipefail
+          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > fixed-build.log 2>&1 || { tail -100 fixed-build.log; exit 1; }
+          tail -25 fixed-build.log
+      - name: Exercise fixed native input
+        run: bash Scripts/run-completion-probe.sh fixed
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: completion-diagnostic
           path: |
-            build.log
-            probe.log
+            *-build.log
+            *-probe.log
