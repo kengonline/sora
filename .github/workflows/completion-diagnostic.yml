@@ -14,7 +14,21 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - name: Install Zig
-        run: brew install zig
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, platform, tarfile, urllib.request
+          arch = 'aarch64' if platform.machine() == 'arm64' else 'x86_64'
+          index = json.load(urllib.request.urlopen('https://ziglang.org/download/index.json'))
+          release = index['0.16.0'][arch + '-macos']
+          archive = os.path.join(os.environ['RUNNER_TEMP'], 'zig.tar.xz')
+          urllib.request.urlretrieve(release['tarball'], archive)
+          assert hashlib.sha256(open(archive, 'rb').read()).hexdigest() == release['shasum']
+          with tarfile.open(archive) as tar:
+              directory = tar.getnames()[0].split('/')[0]
+              tar.extractall(os.environ['RUNNER_TEMP'], filter='data')
+          with open(os.environ['GITHUB_PATH'], 'a') as paths:
+              paths.write(os.path.join(os.environ['RUNNER_TEMP'], directory) + '\n')
+          PY
       - uses: actions/cache@v4
         with:
           path: Vendor/ghostty
