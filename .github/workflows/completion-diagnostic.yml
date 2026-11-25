@@ -42,12 +42,8 @@ jobs:
           xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData build > baseline-build.log 2>&1 || { tail -100 baseline-build.log; exit 1; }
           tail -25 baseline-build.log
       - name: Exercise original native input
-        run: |
-          if bash Scripts/run-completion-probe.sh baseline; then
-            echo 'Original app unexpectedly passed the reproduction' >&2
-            exit 1
-          fi
-          grep -F 'PROBE RESULT: FAIL' baseline-probe.log
+        continue-on-error: true
+        run: bash Scripts/run-completion-probe.sh baseline
       - name: Apply PR fix and instrument it
         run: |
           git fetch origin codex/fix-autocomplete-backspace
@@ -60,6 +56,10 @@ jobs:
           tail -25 fixed-build.log
       - name: Exercise fixed native input
         run: bash Scripts/run-completion-probe.sh fixed Release
+      - name: Verify native comparison
+        run: |
+          grep -F 'PROBE RESULT: FAIL' baseline-probe.log
+          grep -F 'PROBE RESULT: PASS' fixed-probe.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
