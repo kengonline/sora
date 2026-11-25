@@ -23,7 +23,7 @@ text += r'''
 extension GhosttySurfaceView {
     private func probeCompletion() async {
         func log(_ label: String) {
-            print("PROBE \(label): line=\(String(reflecting: shellEditLine)) cursor=\(shellCursorOffset) tracked=\(completion.buffer.isTracking) buffer=\(String(reflecting: completion.buffer.text)) history=\(commandHistory.isPresented) selected=\(String(reflecting: commandHistory.selected?.command))")
+            print("PROBE \(label): line=\(String(reflecting: shellEditLine)) cursor=\(shellCursorOffset) tracked=\(completion.buffer.isTracking) buffer=\(String(reflecting: completion.buffer.text)) history=\(commandHistory.isPresented) selected=\(String(reflecting: commandHistory.selected?.command)) focused=\(window?.firstResponder === self)")
             fflush(stdout)
         }
         func key(_ code: UInt16, _ text: String) {
@@ -43,10 +43,25 @@ extension GhosttySurfaceView {
             let run = CommandRunFactory.make(command: "docker start postgres17.5", cwd: cwd, exitCode: 0, durationNanos: 1)!
             try runtime.history.record(run, tabID: tabID)
             log("initial")
+            // A prior probe may have checkpointed its unsent draft. Start at
+            // a genuinely empty shell prompt, as in the reported reproduction.
+            cancelPromptLine()
+            completion.reset()
+            try await Task.sleep(for: .seconds(1))
+            window?.makeFirstResponder(self)
             for character in "clear" { key(0, String(character)) }
+            try await Task.sleep(for: .seconds(1))
+            log("before clear")
+            guard shellEditLine == "clear" else {
+                print("PROBE SETUP FAILED: shell did not receive the clear command")
+                fflush(stdout)
+                exit(2)
+            }
             key(PromptEvent.returnKey, "\r")
             try await Task.sleep(for: .seconds(2))
             log("after clear")
+            window?.makeKeyAndOrderFront(nil)
+            window?.makeFirstResponder(self)
             key(PromptEvent.upArrow, "\u{f700}")
             try await Task.sleep(for: .seconds(1))
             if commandHistory.selected?.command == "clear" {
@@ -54,6 +69,12 @@ extension GhosttySurfaceView {
             }
             try await Task.sleep(for: .seconds(1))
             log("recalled command")
+            guard commandHistory.isPresented,
+                  commandHistory.selected?.command == "docker start postgres17.5" else {
+                print("PROBE SETUP FAILED: expected history command was not selected")
+                fflush(stdout)
+                exit(2)
+            }
             key(PromptEvent.delete, "\u{7f}")
             try await Task.sleep(for: .seconds(1))
             log("first Backspace")
