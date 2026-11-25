@@ -14,14 +14,21 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - name: Install Zig
+        timeout-minutes: 8
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, platform, tarfile, urllib.request
+          import hashlib, json, os, platform, subprocess, tarfile
           arch = 'aarch64' if platform.machine() == 'arm64' else 'x86_64'
-          index = json.load(urllib.request.urlopen('https://ziglang.org/download/index.json'))
+          index_path = os.path.join(os.environ['RUNNER_TEMP'], 'zig-index.json')
+          subprocess.run(['curl', '-fL', '--ipv4', '--retry', '2', '--connect-timeout', '15',
+                          '--max-time', '60', 'https://ziglang.org/download/index.json', '-o', index_path], check=True)
+          with open(index_path) as index_file:
+              index = json.load(index_file)
           release = index['0.16.0'][arch + '-macos']
           archive = os.path.join(os.environ['RUNNER_TEMP'], 'zig.tar.xz')
-          urllib.request.urlretrieve(release['tarball'], archive)
+          print('Downloading ' + release['tarball'], flush=True)
+          subprocess.run(['curl', '-fL', '--ipv4', '--retry', '2', '--connect-timeout', '15',
+                          '--max-time', '180', release['tarball'], '-o', archive], check=True)
           assert hashlib.sha256(open(archive, 'rb').read()).hexdigest() == release['shasum']
           with tarfile.open(archive) as tar:
               directory = tar.getnames()[0].split('/')[0]
