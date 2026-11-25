@@ -21,7 +21,8 @@ jobs:
         with:
           version: 0.16.0
           use-cache: false
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: ghostty-cache
         with:
           path: Vendor/ghostty
           key: ghosttykit-${{ runner.os }}-${{ runner.arch }}-c81f0b26871c7fbbe2fc35549fdad1f64ed29094-${{ hashFiles('Scripts/build-ghosttykit.sh', 'patches/ghostty-semantic-prompt-boundaries.patch') }}
@@ -29,14 +30,24 @@ jobs:
         run: python3 Scripts/probe-completion.py
       - name: Build GhosttyKit
         run: bash Scripts/build-ghosttykit.sh
+      - name: Save built GhosttyKit
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: Vendor/ghostty
+          key: ${{ steps.ghostty-cache.outputs.cache-primary-key }}
       - name: Build original Sora
         run: |
           set -o pipefail
           xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData build > baseline-build.log 2>&1 || { tail -100 baseline-build.log; exit 1; }
           tail -25 baseline-build.log
       - name: Exercise original native input
-        continue-on-error: true
-        run: bash Scripts/run-completion-probe.sh baseline
+        run: |
+          if bash Scripts/run-completion-probe.sh baseline; then
+            echo 'Original app unexpectedly passed the reproduction' >&2
+            exit 1
+          fi
+          grep -F 'PROBE RESULT: FAIL' baseline-probe.log
       - name: Apply PR fix and instrument it
         run: |
           git fetch origin codex/fix-autocomplete-backspace
@@ -45,10 +56,10 @@ jobs:
       - name: Build and test fixed Sora
         run: |
           set -o pipefail
-          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Debug -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > fixed-build.log 2>&1 || { tail -100 fixed-build.log; exit 1; }
+          xcodebuild -project Sora.xcodeproj -scheme Sora -configuration Release -destination 'platform=macOS' -derivedDataPath .derivedData -parallel-testing-enabled NO test > fixed-build.log 2>&1 || { tail -100 fixed-build.log; exit 1; }
           tail -25 fixed-build.log
       - name: Exercise fixed native input
-        run: bash Scripts/run-completion-probe.sh fixed
+        run: bash Scripts/run-completion-probe.sh fixed Release
       - uses: actions/upload-artifact@v4
         if: always()
         with:

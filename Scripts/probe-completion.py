@@ -4,6 +4,13 @@ from pathlib import Path
 path = Path('Sora/Terminal/GhosttySurfaceView.swift')
 text = path.read_text()
 text = text.replace('private var isShellPromptReady = false', 'private var isShellPromptReady = false\n    private var didProbeCompletion = false')
+text = text.replace('            createSurfaceIfNeeded()', r'''            createSurfaceIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self else { return }
+                print("PROBE startup: surface=\(self.surface != nil) foreground=\(self.foregroundExecutable ?? "nil") ready=\(self.isShellPromptReady) line=\(String(reflecting: self.shellEditLine))")
+                fflush(stdout)
+            }
+''')
 text = text.replace('private func finishStartupInput() {', '''private func finishStartupInput() {
         if !didProbeCompletion, isShellPromptReady, shellEditLine != nil,
            ProcessInfo.processInfo.environment["SORA_COMPLETION_PROBE"] == "1" {
@@ -70,6 +77,11 @@ extension GhosttySurfaceView {
 }
 '''
 path.write_text(text)
+
+configuration = Path('Sora/Resources/sora.ghostty')
+config = configuration.read_text()
+if '# Native completion probe shell' not in config:
+    configuration.write_text(config + '\n# Native completion probe shell\ncommand = /bin/zsh\n')
 
 bootstrap = Path('Sora/Resources/zsh/zshenv')
 startup = bootstrap.read_text()
