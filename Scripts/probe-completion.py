@@ -70,3 +70,17 @@ extension GhosttySurfaceView {
 }
 '''
 path.write_text(text)
+
+bootstrap = Path('Sora/Resources/zsh/zshenv')
+startup = bootstrap.read_text()
+marker = '# Reproduce the reported cached-completion shortcut conflict.'
+if marker not in startup:
+    bootstrap.write_text(startup + '\n' + marker + '''
+if [[ -o interactive ]]; then
+  autoload -Uz _read_comp
+  zle -C _read_comp .complete-word _read_comp
+  for keymap in emacs viins vicmd; do
+    bindkey -M "$keymap" '^X^R' _read_comp
+  done
+fi
+''')

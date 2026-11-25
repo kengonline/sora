@@ -48,7 +48,7 @@ jobs:
       - name: Apply PR fix and instrument it
         run: |
           git fetch origin codex/fix-autocomplete-backspace
-          git checkout FETCH_HEAD -- Sora/Commands/CommandHistorySession.swift Sora/Terminal/GhosttySurfaceView.swift SoraTests/CommandHistorySessionTests.swift
+          git checkout FETCH_HEAD -- Sora/Resources/zsh/command-blocks.zsh Sora/Terminal/GhosttySurfaceView.swift SoraTests/SoraZshBootstrapTests.swift
           python3 Scripts/probe-completion.py
       - name: Build and test fixed Sora
         run: |
